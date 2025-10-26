@@ -1,23 +1,23 @@
-import os
 import argparse
 import datetime
-import PIL.Image
+import os
+
 import numpy as np
 import pandas as pd
-
+import PIL.Image
 import torch
 import torch.distributed as dist
-
-from transformers import AutoTokenizer, UMT5EncoderModel
-from torchvision.io import write_video
 from diffusers.utils import load_image
-
-from longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from longcat_video.modules.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
-from longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
-from longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
 from longcat_video.context_parallel import context_parallel_util
 from longcat_video.context_parallel.context_parallel_util import init_context_parallel
+from longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
+from longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
+from longcat_video.modules.scheduling_flow_match_euler_discrete import (
+    FlowMatchEulerDiscreteScheduler,
+)
+from longcat_video.pipeline_longcat_video import LongCatVideoPipeline
+from torchvision.io import read_video, write_video
+from transformers import AutoTokenizer, UMT5EncoderModel
 
 
 def torch_gc():
@@ -30,6 +30,16 @@ def make_even_size(size):
     width = width if width % 2 == 0 else width - 1
     height = height if height % 2 == 0 else height - 1
     return (width, height)
+
+
+def load_video_as_pil_images(video_path):
+    video_tensor, audio, info = read_video(video_path, pts_unit="sec")
+    pil_images = []
+    for i in range(video_tensor.shape[0]):
+        frame = video_tensor[i].numpy()
+        pil_img = PIL.Image.fromarray(frame)
+        pil_images.append(pil_img)
+    return pil_images
 
 
 def generate_stage2(args):
@@ -91,32 +101,28 @@ def generate_stage2(args):
     generator.manual_seed(seed)
 
     for idx, row in df.iterrows():
-        if local_rank == 0:
-            print(f"\n{'=' * 60}")
-            print(f"[{idx + 1}/{len(df)}]: {os.path.basename(row['file_name'])}")
-            print(f"{'=' * 60}")
-
         image_path = row["file_name"]
         prompt = row["text"]
         image_name = os.path.splitext(os.path.basename(image_path))[0]
 
         # Load stage1 results
-        stage1_path = os.path.join(args.stage1_output_dir, f"{image_name}.npy")
-        if not os.path.exists(stage1_path):
+        stage1_video_path = os.path.join(args.stage1_output_dir, f"{image_name}.mp4")
+        if not os.path.exists(stage1_video_path):
             if local_rank == 0:
-                print(f"⚠️ Warning: Stage1 result not found for {image_name}, skipping...")
+                print(f"Warning: Stage1 video not found for {image_name}, skipping...")
             continue
 
-        # Load intermediate results
-        output_distill = np.load(stage1_path)  # [num_frames, H, W, 3], float32 [0,1]
-
-        # Convert to PIL Images
-        stage1_video = [(output_distill[i] * 255).astype(np.uint8) for i in range(output_distill.shape[0])]
-        stage1_video = [PIL.Image.fromarray(img) for img in stage1_video]
+        stage1_video = load_video_as_pil_images(stage1_video_path)
 
         # Load original image
         image = load_image(image_path)
         target_size = image.size
+
+        if local_rank == 0:
+            print(f"\n{'=' * 60}")
+            print(f"[{idx + 1}/{len(df)}]: {os.path.basename(row['file_name'])}")
+            print(f"Loaded 480p video: {len(stage1_video)} frames")
+            print(f"{'=' * 60}")
 
         # Generate 720p refinement
         output_refine = pipe.generate_refine(
@@ -138,9 +144,9 @@ def generate_stage2(args):
 
             output_tensor = torch.from_numpy(np.array(output_refine))
             output_path = os.path.join(args.final_output_dir, f"{image_name}.mp4")
-            write_video(output_path, output_tensor, fps=args.fps, video_codec="libx264", options={"crf": "10"})
+            write_video(output_path, output_tensor, fps=args.fps, video_codec="libx264", options={"crf": str(args.crf)})
 
-        del output_distill, stage1_video, output_refine
+        del stage1_video, output_refine
         torch_gc()
 
     if local_rank == 0:
@@ -154,8 +160,9 @@ def _parse_args():
     parser.add_argument("--stage1_output_dir", type=str, required=True, help="Directory with stage1 results")
     parser.add_argument("--final_output_dir", type=str, required=True, help="Directory to save final videos")
     parser.add_argument("--context_parallel_size", type=int, required=True)
-    parser.add_argument("--fps", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fps", type=int, required=True)
+    parser.add_argument("--crf", type=int, default=10)
     parser.add_argument("--enable_compile", action="store_true")
     args = parser.parse_args()
     return args

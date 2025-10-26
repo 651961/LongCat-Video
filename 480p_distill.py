@@ -1,21 +1,23 @@
-import os
 import argparse
 import datetime
+import os
+
 import numpy as np
 import pandas as pd
-
+import PIL.Image
 import torch
 import torch.distributed as dist
-
-from transformers import AutoTokenizer, UMT5EncoderModel
 from diffusers.utils import load_image
-
-from longcat_video.pipeline_longcat_video import LongCatVideoPipeline
-from longcat_video.modules.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
-from longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
-from longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
 from longcat_video.context_parallel import context_parallel_util
 from longcat_video.context_parallel.context_parallel_util import init_context_parallel
+from longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
+from longcat_video.modules.longcat_video_dit import LongCatVideoTransformer3DModel
+from longcat_video.modules.scheduling_flow_match_euler_discrete import (
+    FlowMatchEulerDiscreteScheduler,
+)
+from longcat_video.pipeline_longcat_video import LongCatVideoPipeline
+from torchvision.io import write_video
+from transformers import AutoTokenizer, UMT5EncoderModel
 
 
 def torch_gc():
@@ -83,17 +85,17 @@ def generate_stage1(args):
     generator.manual_seed(seed)
 
     for idx, row in df.iterrows():
-        if local_rank == 0:
-            print(f"\n{'=' * 60}")
-            print(f"[{idx + 1}/{len(df)}]: {os.path.basename(row['file_name'])}")
-            print(f"{'=' * 60}")
-
         image_path = row["file_name"]
         prompt = row["text"]
         image_name = os.path.splitext(os.path.basename(image_path))[0]
 
         # Load image
         image = load_image(image_path)
+
+        if local_rank == 0:
+            print(f"\n{'=' * 60}")
+            print(f"[{idx + 1}/{len(df)}]: {os.path.basename(row['file_name'])}")
+            print(f"{'=' * 60}")
 
         # Generate 480p distill
         output_distill = pipe.generate_i2v(
@@ -110,8 +112,11 @@ def generate_stage1(args):
 
         # Save intermediate results (numpy array)
         if local_rank == 0:
-            save_path = os.path.join(args.stage1_output_dir, f"{image_name}.npy")
-            np.save(save_path, output_distill)  # Save as float32 [0,1]
+            save_path = os.path.join(args.stage1_output_dir, f"{image_name}.mp4")
+            output_frames = [(output_distill[i] * 255).astype(np.uint8) for i in range(output_distill.shape[0])]
+            output_frames = [PIL.Image.fromarray(img) for img in output_frames]
+            output_tensor = torch.from_numpy(np.array(output_frames))
+            write_video(save_path, output_tensor, fps=args.fps, video_codec="libx264", options={"crf": str(args.crf)})
 
         del output_distill
         torch_gc()
@@ -127,6 +132,8 @@ def _parse_args():
     parser.add_argument("--stage1_output_dir", type=str, required=True, help="Directory to save stage1 results")
     parser.add_argument("--context_parallel_size", type=int, required=True)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fps", type=int, required=True)
+    parser.add_argument("--crf", type=int, default=10)
     parser.add_argument("--enable_compile", action="store_true")
     args = parser.parse_args()
     return args

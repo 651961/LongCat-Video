@@ -7,7 +7,7 @@
 
 <div align="center" style="line-height: 1;">
   <a href='https://meituan-longcat.github.io/LongCat-Video/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
-  <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/longcatvideo_tech_report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href='https://arxiv.org/abs/2510.22200'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
 </div>
 
@@ -29,7 +29,7 @@ We introduce LongCat-Video, a foundational video generation model with 13.6B par
 - 🌟 **Efficient inference**: LongCat-Video generates $720p$, $30fps$ videos within minutes by employing a coarse-to-fine generation strategy along both the temporal and spatial axes. Block Sparse Attention further enhances efficiency, particularly at high resolutions
 - 🌟 **Strong performance with multi-reward RLHF**: Powered by multi-reward Group Relative Policy Optimization (GRPO), comprehensive evaluations on both internal and public benchmarks demonstrate that LongCat-Video achieves performance comparable to leading open-source video generation models as well as the latest commercial solutions.
 
-For more detail, please refer to the comprehensive [***LongCat-Video Technical Report***](https://github.com/meituan-longcat/LongCat-Video/blob/main/longcatvideo_tech_report.pdf).
+For more detail, please refer to the comprehensive [***LongCat-Video Technical Report***](https://arxiv.org/abs/2510.22200).
 
 ## 🎥 Teaser Video
 
@@ -122,6 +122,16 @@ torchrun run_demo_long_video.py --checkpoint_dir=./weights/LongCat-Video --enabl
 torchrun --nproc_per_node=2 run_demo_long_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video --enable_compile
 ```
 
+### Run Interactive Video Generation
+
+```shell
+# Single-GPU inference
+torchrun run_demo_interactive_video.py --checkpoint_dir=./weights/LongCat-Video --enable_compile
+
+# Multi-GPU inference
+torchrun --nproc_per_node=2 run_demo_interactive_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video --enable_compile
+```
+
 ### Run Streamlit
 
 ```shell
@@ -162,6 +172,13 @@ The *Image-to-Video* MOS evaluation results on our internal benchmark.
 | Motion Quality↑ | 3.77 | 3.80 | 3.79 | 3.59 |
 | Overall Quality↑ | 3.35 | 3.27 | 3.26 | 3.17 |
 
+## Community Works
+
+Community works are welcome! Please PR or inform us in Issue to add your work.
+
+- [CacheDiT](https://github.com/vipshop/cache-dit) offers Fully Cache Acceleration support for LongCat-Video with DBCache and TaylorSeer, achieved nearly 1.7x speedup without obvious loss of precision. Visit their [example](https://github.com/vipshop/cache-dit/blob/main/examples/pipeline/run_longcat_video.py) for more details.
+
+
 ## License Agreement
 
 The **model weights** are released under the **MIT License**. 
@@ -169,6 +186,7 @@ The **model weights** are released under the **MIT License**.
 Any contributions to this repository are licensed under the MIT License, unless otherwise stated. This license does not grant any rights to use Meituan trademarks or patents. 
 
 See the [LICENSE](LICENSE) file for the full license text.
+
 
 ## Usage Considerations 
 This model has not been specifically designed or comprehensively evaluated for every possible downstream application. 
@@ -182,14 +200,14 @@ Nothing in this Model Card should be interpreted as altering or restricting the 
 We kindly encourage citation of our work if you find it useful.
 
 ```
-@misc{meituan2025longcatvideotechnicalreport, 
-    title={LongCat-Video Technical Report}, 
-    author={Meituan LongCat Team}, 
-    year={2025}, 
-    eprint={xxx}, 
-    archivePrefix={arXiv}, 
-    primaryClass={cs.CL}, 
-    url={https://arxiv.org/abs/xxx}, 
+@misc{meituanlongcatteam2025longcatvideotechnicalreport,
+      title={LongCat-Video Technical Report}, 
+      author={Meituan LongCat Team and Xunliang Cai and Qilong Huang and Zhuoliang Kang and Hongyu Li and Shijun Liang and Liya Ma and Siyu Ren and Xiaoming Wei and Rixu Xie and Tong Zhang},
+      year={2025},
+      eprint={2510.22200},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2510.22200}, 
 }
 ```
 

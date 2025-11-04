@@ -27,6 +27,7 @@ def generate(args):
     # case setup
     prompt = "In a realistic photography style, a white boy around seven or eight years old sits on a park bench, wearing a light blue T-shirt, denim shorts, and white sneakers. He holds an ice cream cone with vanilla and chocolate flavors, and beside him is a medium-sized golden Labrador. Smiling, the boy offers the ice cream to the dog, who eagerly licks it with its tongue. The sun is shining brightly, and the background features a green lawn and several tall trees, creating a warm and loving scene."
     negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+    spatial_refine_only = False 
 
     # load parsed args
     checkpoint_dir = args.checkpoint_dir
@@ -134,6 +135,7 @@ def generate(args):
         stage1_video=stage1_video,
         num_inference_steps=50,
         generator=generator,
+        spatial_refine_only=spatial_refine_only
     )[0]
 
     pipe.dit.disable_all_loras()
@@ -142,7 +144,8 @@ def generate(args):
     if local_rank == 0:
         output_tensor = torch.from_numpy(output_refine)
         output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
-        write_video("output_t2v_refine.mp4", output_tensor, fps=30, video_codec="libx264", options={"crf": f"{10}"})
+        fps = 15 if spatial_refine_only else 30
+        write_video("output_t2v_refine.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
 
 
 def _parse_args():

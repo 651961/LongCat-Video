@@ -29,6 +29,7 @@ def generate(args):
     num_segments = 11  # 1 minute video
     num_frames = 93
     num_cond_frames = 13
+    spatial_refine_only = False
 
     # load parsed args
     checkpoint_dir = args.checkpoint_dir
@@ -150,7 +151,7 @@ def generate(args):
 
     for segment_idx in range(num_segments+1):
         if local_rank == 0:
-            print(f"Refine segment {segment_idx + 1}/{num_segments}...")
+            print(f"Refine segment {segment_idx + 1}/{num_segments+1}...")
 
         output_refine = pipe.generate_refine(
             video=cur_condition_video,
@@ -159,6 +160,7 @@ def generate(args):
             num_cond_frames=cur_num_cond_frames,
             num_inference_steps=50,
             generator=generator,
+            spatial_refine_only=spatial_refine_only
         )[0]
 
         new_video = [(output_refine[i] * 255).astype(np.uint8) for i in range(output_refine.shape[0])]
@@ -167,12 +169,13 @@ def generate(args):
 
         all_refine_frames.extend(new_video[cur_num_cond_frames:])
         cur_condition_video = new_video
-        cur_num_cond_frames = num_cond_frames * 2
+        cur_num_cond_frames = num_cond_frames if spatial_refine_only else num_cond_frames * 2
         start_id = start_id + num_frames - num_cond_frames
         
         if local_rank == 0:
             output_tensor = torch.from_numpy(np.array(all_refine_frames))
-            write_video(f"output_longvideo_refine_{segment_idx}.mp4", output_tensor, fps=30, video_codec="libx264", options={"crf": f"{10}"})
+            fps = 15 if spatial_refine_only else 30
+            write_video(f"output_longvideo_refine_{segment_idx}.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
 
 def _parse_args():
     parser = argparse.ArgumentParser()

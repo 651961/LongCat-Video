@@ -41,6 +41,7 @@ def generate(args):
     prompt = "A person rides a motorcycle along a long, straight road that stretches between a body of water and a forested hillside. The rider steadily accelerates, keeping the motorcycle centered between the guardrails, while the scenery passes by on both sides. The video captures the journey from the rider’s perspective, emphasizing the sense of motion and adventure."
     negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
     num_cond_frames = 13
+    spatial_refine_only = False
 
     # load parsed args
     checkpoint_dir = args.checkpoint_dir
@@ -165,14 +166,16 @@ def generate(args):
 
     target_fps = 30
     stride = max(1, round(current_fps / target_fps))
+    cur_num_cond_frames = num_cond_frames if spatial_refine_only else num_cond_frames * 2
 
     output_refine = pipe.generate_refine(
         video=video[::stride],
         prompt=prompt,
         stage1_video=stage1_video,
-        num_cond_frames=num_cond_frames*2,
+        num_cond_frames=cur_num_cond_frames,
         num_inference_steps=50,
         generator=generator,
+        spatial_refine_only=spatial_refine_only
     )[0]
 
     pipe.dit.disable_all_loras()
@@ -182,10 +185,11 @@ def generate(args):
         output_refine = [(output_refine[i] * 255).astype(np.uint8) for i in range(output_refine.shape[0])]
         output_refine = [PIL.Image.fromarray(img) for img in output_refine]
         output_refine = [frame.resize(target_size, PIL.Image.BICUBIC) for frame in output_refine]
-        output_refine = video[::stride] + output_refine[num_cond_frames*2:]
+        output_refine = video[::stride] + output_refine[cur_num_cond_frames:]
 
         output_tensor = torch.from_numpy(np.array(output_refine))
-        write_video("output_vc_refine.mp4", output_tensor, fps=30, video_codec="libx264", options={"crf": f"{10}"})
+        fps = 15 if spatial_refine_only else 30
+        write_video("output_vc_refine.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
 
 
 def _parse_args():

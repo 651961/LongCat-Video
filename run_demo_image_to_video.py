@@ -30,6 +30,7 @@ def generate(args):
     image = load_image(image_path)
     prompt = "A woman sits at a wooden table by the window in a cozy café. She reaches out with her right hand, picks up the white coffee cup from the saucer, and gently brings it to her lips to take a sip. After drinking, she places the cup back on the table and looks out the window, enjoying the peaceful atmosphere."
     negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+    spatial_refine_only = False
 
     # load parsed args
     checkpoint_dir = args.checkpoint_dir
@@ -147,6 +148,7 @@ def generate(args):
         num_cond_frames=1,
         num_inference_steps=50,
         generator=generator,
+        spatial_refine_only=spatial_refine_only
     )[0]
 
     pipe.dit.disable_all_loras()
@@ -158,7 +160,8 @@ def generate(args):
         output_refine = [frame.resize(target_size, PIL.Image.BICUBIC) for frame in output_refine]
 
         output_tensor = torch.from_numpy(np.array(output_refine))
-        write_video("output_i2v_refine.mp4", output_tensor, fps=30, video_codec="libx264", options={"crf": f"{10}"})
+        fps = 15 if spatial_refine_only else 30
+        write_video("output_i2v_refine.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
 
 
 def _parse_args():
